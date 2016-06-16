@@ -1,0 +1,257 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use Getopt::Long;
+use JSON::PP;
+
+my $usage = <<EOS;
+  Synopsis: metameta -key KEYNAME [options]
+
+  Stores structured metadata that is associated with a file or collection (~directory)
+  through a "key" (a unique short string) that links the file or collection to the metadata.
+  
+  There are two modes for entering metadata for a given key:
+  (1) Interactive: choose from a list of attribute names and provide associated values.
+  (2) File: provide a filename that contains attribute-value pairs.
+  
+  Example 1: 
+    metameta -key XYZ 
+        This allows interactive entry of attribute-value pairs, and stores the results
+        in a database, with the A-V pairs referenced by the given key.
+        In the example key "NS-XYZ", "NS-" is the selected namespace string.
+        If the provided key doesn't have a namespace (with form "XY-"), the default
+        namespace in the program will be used, unless it ie explicitly provided
+        as a parameter using the -namespace option.
+  
+  Example 2:
+    metameta -key XYZ -file  NEW_META.tsv
+        In this usage, metadata are supplied through a file.
+
+  Example 3:
+    metameta -key XYZ -comment
+        In this usage, the comment field for the specified key can be entered interactively.
+
+  Required:
+    -key           
+  
+  Options:
+    -comment       Only add comments for one or more keys, then exit. 
+                   Used only in interactive mode (default if not -file)
+    -file          To specify a file with metadata, to be added to the registry.
+                   
+                   If -file is not set, then the program will be run interactively.
+                   In interactive mode, all available attributes will be presented, 
+                   for interactive entry of values. If not value is entered for an attribute, 
+                   that attribute-value pair won't be stored.
+    -registry      Base filename for "registries" of metadata keys. If the base registry 
+                   filename is "./registry" (default), then this metadata file will be 
+                   accessed (or created if it doesn't exist):
+                      registry_meta.json      Hash of keys and {attributes -> values}
+  
+    -namespace     Brief namespace, used to prefix the key. Default may be set in the code.
+                   In the example key "NS-XYZ", "NS-" is the selected namespace string.
+                   If the provided key doesn't have a namespace (with form "XY-"), the default
+                   namespace in the program will be used, unless it ie explicitly provided
+                   as a parameter using the -namespace option.
+    -attribute_list  Filename with list of attributes (field names) that may be used in creating 
+                      the attribute-value metadata listing. Useful in interactive mode.
+                      Default name can be set in the code.
+    -format        "table" or "json" (default "table").
+     
+    -help          This message. 
+  
+EOS
+
+my ($help, $key, $file, $comment);
+my $format = "table";
+
+my $home_dir = glob("~");
+my $metadata_dir = "metadata"; # You may want to change this
+my $registry = "registry";
+my $attribute_list = "attr_general.lis";
+
+my $namespace="LF";
+
+GetOptions (
+  "key=s" =>            \$key,  # required
+  "attribute_list:s" => \$attribute_list,
+  "file:s" =>           \$file,
+  "registry:s" =>       \$registry,
+  "comment" =>          \$comment,
+  "namespace:s" =>      \$namespace,
+  "format:s" =>         \$format,
+  "help" =>             \$help,
+);
+
+die "\n$usage\n" if ( $help or !defined($key) and !defined($file) );
+
+# Strategy:
+# Open metadata repository file and read it into a HoH
+# Open attribute list file
+# Allow interactive entry of values for metadata attributes for the indicated key
+# Allow the user to enter data for other keys if they wish
+# Write data to file and close
+
+my $attribute_list_path = "$home_dir/$metadata_dir/$attribute_list";
+
+
+my $ext;
+if ( $format =~ /^t/i ) { $ext = "tab" }
+elsif ( $format =~ /^j/i ) { $ext = "json" }
+else { die "\n$format must be 'table' or 'json'\n" }
+
+my $registry_meta_path = "$home_dir/$metadata_dir/$registry" . "_meta.$ext";
+my (%HoH, $href, @attr);
+
+my $REGISTRY_FH;
+if(-e $registry_meta_path) {
+  open ($REGISTRY_FH, "<", $registry_meta_path) or die "can't open in $registry_meta_path: $!\n";
+  print "# EXISTING REGISTRY FILE: $registry_meta_path\n";
+  if ($format =~ /^t/i) { # format is tabular
+    while (<$REGISTRY_FH>) {
+      $_ =~ /(\S+)\s(\S+)\s(.+)/;
+      my ($key, $attr, $val) = ($1, $2, $3);
+      $HoH{$key}{$attr} = $val;
+    }
+  }
+  else { # format isn't tabular, so try json
+    my $db_text = (<$REGISTRY_FH>);
+    $href = decode_json($db_text);
+    %HoH = %$href;
+  }
+}
+else {
+  open ($REGISTRY_FH, ">", $registry_meta_path) or die "can't open out $registry_meta_path: $!\n";
+  print "# NEW REGISTRY FILE: $registry_meta_path\n";
+}
+close $REGISTRY_FH;
+
+print "# ATTRIBUTE LIST: $attribute_list_path\n";
+
+my $keys_entered = 0;
+if (!$file) {
+  BLOCK: while(1){
+    open (my $ATTR_IN, "<", $attribute_list_path) or die "can't open in $attribute_list_path: $!\n";
+    print "# KEY: $key\n\n";
+      while (<$ATTR_IN>) {
+        chomp;
+        my $attr = $_;
+        next if $attr =~ /^#/;
+        push(@attr, $attr); # array of attributes and ordinal value
+
+        if ($comment) { # Just allow input or modification of the comment field - no other attributes
+          next unless ($attr =~ /comment/i);
+          if ($HoH{$key}{$attr}) {
+            print "$attr:\t [$HoH{$key}{$attr}] ";
+          }
+          else {
+            print "$attr:\t ";
+          }
+          $_ = <STDIN>; # Prompt user for value
+          $keys_entered++;
+          chomp;
+          my $value = $_;
+          if (length($value)>0) {
+            $HoH{$key}{$attr} = $value;
+          }
+       }
+       else {
+        if ($HoH{$key}{$attr}) {
+          print "$attr:\t [$HoH{$key}{$attr}] ";
+        }
+        else {
+          print "$attr:\t ";
+        }
+        $_ = <STDIN>; # Prompt user for value
+        $keys_entered++;
+        chomp;
+        my $value = $_;
+        if (length($value)>0) {
+          $HoH{$key}{$attr} = $value;
+        }
+      }
+    }
+    print "Enter data for another key? (y/n)\n";
+    $_ = <STDIN>;
+    if ($_ =~ /y/i) {
+      close $ATTR_IN;
+      print "What is the key?\n";
+      $_ = <STDIN>; # Prompt user for value
+      chomp;
+      $key = $_;
+      redo BLOCK; # Use the provided key and take in new metadata
+    }
+    else { last }
+  }
+}
+elsif ($file) { # not interactive, so from file
+  open (my $FH_NEW, "<", $file) or die "can't open $file:$!\n";
+  print "NEW METADATA FILE: $file\n";
+  my $new_db_records = (<$FH_NEW>);
+  
+  my $href;
+  my %HoH_new;
+  if ($format =~ /^t/i) { # format is tabular
+    while (<$FH_NEW>) {
+      $_ =~ /(\S+)\s(\S+)\s(.+)/;
+      my ($key, $attr, $val) = ($1, $2, $3);
+      $HoH_new{$key}{$attr} = $val;
+    }
+  }
+  else { # format must be json
+    $href = decode_json($new_db_records);
+    #my $href = decode_json($new_db_records);
+    %HoH_new = %$href;
+  }
+
+  foreach my $key ( keys %HoH_new ) {
+    foreach my $attr ( keys %{ $HoH_new{$key} } ) {
+      my $val = $HoH_new{$key}{$attr};
+      $HoH{$key}{$attr} = $HoH_new{$key}{$attr};
+      print "ADDED: $key\t$attr\t$val\n";
+    }
+  }
+}
+else {
+  die "\nPlease indicate interactive use (omit '-file') OR specify -file FILENAME." .
+       "\n\nSee -help for more information.\n\n";
+}
+
+open(my $OUT, ">", $registry_meta_path); 
+# If format is "table", print key, attribute, value
+if ($format =~ /^t/i) {
+  foreach my $key ( keys %HoH ) {
+    for my $attr (@attr){ # Retain order of @attr by traversing this list
+      my $val = $HoH{$key}{$attr};
+      if (defined $val) {
+        #print "$key\t$attr\t$val\n";
+        print $OUT "$key\t$attr\t$val\n";
+      }
+    }
+  }
+}
+else { # format must be "json". Note: attr order is not in attribute_list_path order in JSON output
+  my $jsonobj = JSON::PP->new;
+  print $OUT encode_json(\%HoH);
+  #print $OUT encode_json(\%HoH), "\n" or die "Can't print HoH in $registry:\n";
+}
+close($OUT);
+
+__END__
+
+VERSIONS
+v01 05-27-16 SC Interactive toy version, using Storable
+v02 05-29-16 SC Take input interactively or from file. Read and write to 
+             JSON or simple HoH table.
+v03 05-29-16 SC Retain order of attribute_list in text output.
+             Add option to only add/modify comment
+             Remove -interactive flag (this is now the default mode, in absence of -file)
+v04 06-13-16 SC Set default output directory to glob("~/metadata/). The idea is to write keys 
+             and log locally and then merge in a git repository.
+v05 06-15-16 SC Change construction of registry name and path
+
+TO DO: if a key is entered that exists in the metadata registry, EDIT rather than re-enter the data for that session.
+
+TO DO: add a function to simply report data for a given key.
+
+

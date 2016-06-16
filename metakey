@@ -1,0 +1,227 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use Getopt::Long;
+
+my $usage = <<EOS;
+  Synopsis: metakey -original_name FILENAME -pre PREFIX -ext extension [options]
+
+  Generates a random short name (a key) to associate with a file or directory name, and
+  a new filename composed around that key. Stores a hash of the new key and the 
+  previous file or directory name.
+  
+  Examples: 
+    metakey -com "Key and rename initial file" -pre gensp.pre -ext fa -orig initial_file.fa
+      returns:
+        # MsI Key and rename initial file
+        initial_file.fa  gensp.pre.MsI.fa
+
+    metakey -com "Rekey a file" -pre gensp.pre -ext .fa -orig gensp.pre.MsI.fa
+      returns:
+        # t2h Rekey a file #1
+          gensp.pre.MsI.fa  gensp.pre.t2h.fa
+
+    metakey -simple [INTEGER]
+      returns just a set of unique, simple key (INTEGER many; or a single key if no integer is given):
+        # xYz 
+
+  Required unless "-simple" is set:
+    -original_name  Original filename
+    -prefix     Human-readable filename prefix
+    -extension  A file extension, e.g. fa, gff, txt
+  
+  Options:
+    -simple     Return just a unique key string and end
+    -key        Short unique name (provide if you want to use an existing key in the new extension)
+    -registry   Base filename for "registries" of metadata keys. If the base filename 
+                is "~/metadata/registry" (default), then these files will be generated:
+                   registry_main.txt      Hash of keys and filenames
+                   registry_rev_hist.txt  Hash of new keys and preceding keys or initial filename
+    -log        Log file to write a record of this file's operations, 
+                written to "~/metadata/" by default
+    -comment:s  Brief comments about the this file naming operation
+  
+    -len_of_id  Length of generated random string used in the new IDs (>=2)
+  
+    -help       This message. 
+  
+EOS
+
+my ($extension, $help, $prefix, $key, $comment, $simple);
+
+my $home_dir = glob("~");
+my $metadata_dir = "metadata"; # You may want to change this
+my $logfile="$home_dir/$metadata_dir/LOG.txt";
+my $registry = "$home_dir/$metadata_dir/registry";
+
+my $original_name="NONE";
+my $len_of_id = 4;
+
+GetOptions (
+  "simple:i" =>        \$simple,  
+  "original_name:s" => \$original_name,  # required unless -simple
+  "logfile:s" =>       \$logfile,
+  "prefix:s" =>        \$prefix,  # required unless -simple
+  "key:s" =>           \$key,
+  "extension:s" =>     \$extension,   # required unless -simple
+  "comment:s" =>       \$comment,
+  "len_of_id:i" =>     \$len_of_id,
+  "help" =>            \$help,
+);
+
+die "\n$usage\n" if ( $help 
+                      or !defined($simple) 
+                      and not (defined($original_name) and defined($prefix) and defined($extension) ) );
+
+if (defined($simple)) {
+  if ($simple == 0) {
+    $simple=1; # makes counting easier. If user specifies just "-simple", $simple is 
+    # then definedbut has a value of 0. Change it to 1 so we print 1 key. 
+    # If user specified "simple 10", then print 10 keys.
+  }
+}
+
+die "\n-len_of_id must be >= 2\n" if ( $len_of_id < 2 );
+my $LOG;
+if ($logfile) {
+  open ($LOG, ">>", $logfile) or die 
+    "Can't open $logfile for writing. Check whether $home_dir/$metadata_dir exists. $!\n";
+}
+
+my $registry_main = $registry . "_main.txt";
+my $registry_rev_hist = $registry . "_rev_hist.txt";
+
+
+# 62 characters (excluding vowels AEIOU, to avoid words)
+my @s=qw(B C D F G H J K L M N P Q R S T V W X Y Z 
+         b c d f g h j k l m n p q r s t v w x y z 0 1 2 3 4 5 6 7 8 9);
+my %id_hsh;
+
+########## Generate a new key and store the key & new keyed filename ##########
+my $new_filename="";
+my $orig_key="";
+my $new_key="";
+my $simple_ct=0;
+my $keys_tried=0;
+my $MAX_KEYS_TO_TRY=10;
+if (defined($key) and not defined($simple)) { # If $key was supplied by user, use it; otherwise ...
+  $orig_key = $key;
+  $new_key = $key;
+  $new_filename = "$prefix.$orig_key.$extension";  
+}
+else { # ... otherwise, generate a new key
+  
+  my $DBH_MAIN;
+  
+  $new_key="";
+  BLOCK: while (1) {
+    for (1..$len_of_id) { $new_key .= $s[int(rand()*52)] }
+
+    # Read stored hash into memory, from main registry
+    if (-e $registry_main) { # Read key hash in, if it exists
+      open(my $DBH_MAIN, "<", $registry_main) or die "Can't open $registry_main. Check whether $home_dir/$metadata_dir exists.:$!\n";
+      while (<$DBH_MAIN>) {
+        chomp;
+        my ($key, $val) = split /\s/;
+        $id_hsh{$key} = $val;
+      }
+      close $DBH_MAIN;
+    }
+    else { 
+      # there is no registry, but it will be created below, with open ... ">>"
+    }
+    
+    # Open registry for writing
+    open($DBH_MAIN, ">>", $registry_main) or die "Can't open out $registry_main. Check whether $home_dir/$metadata_dir exists.$!\n";
+
+    if ($id_hsh{$new_key}) {
+      $keys_tried++;
+      die "# The key registry seems to be saturated: $MAX_KEYS_TO_TRY keys were tried before generating the number of requested keys.\n" 
+         if ($keys_tried > $MAX_KEYS_TO_TRY);
+
+      print "## $new_key exists; trying another\n";
+      $new_key = "";
+      redo BLOCK;
+    } 
+    else { # new key doesn't exist
+         
+      if (defined($simple)) {
+        if ($simple_ct < $simple) { 
+          print "$new_key\n";
+          $id_hsh{$new_key} = "NONE";
+          print $DBH_MAIN "$new_key\tNONE\n";
+          $simple_ct++;
+          $new_key = "";
+          close $DBH_MAIN;
+          redo BLOCK;
+        }
+        else {
+          exit; # we're done generating and reporting key[s], so exit
+        }
+      }
+      else { # not "simple", so generate key and filename
+        $new_filename = "$prefix.$new_key.$extension";
+        # print "new_key: $new_key\n";
+        $id_hsh{$new_key} = $new_filename;
+        print "$new_key\t$new_filename\n";
+        print $DBH_MAIN "$new_key\t$new_filename\n";
+        last;
+      }
+    }
+  }
+}
+
+########## Print to LOG ##########
+my $logstring;
+if (defined $comment) {
+  $logstring = "\n# $new_key $comment\n  $original_name\t$new_filename\n";
+}
+else {
+  $logstring = "# \n  $original_name\t$new_filename\n";
+}
+print $logstring;
+if (defined($logfile)) {
+  print $LOG $logstring;
+}
+
+########## Store the previous key & new key ##########
+# A==>B   B==>C   C==>D   is stored as
+# B==>A   C==>B   D==>C   so that, given D, we can trace the key history:
+# D <== C <== B <== A
+
+my $DBH_HIST;
+open($DBH_HIST, ">>", $registry_rev_hist) or die "can't open out $registry_rev_hist:$!\n";
+
+if (defined($key)) { # enter in order VALUE, KEY
+  #print " [$new_key], [$orig_key]\n";
+  print $DBH_HIST "$new_key\t$orig_key\n";
+}
+else { # enter in order VALUE, KEY
+  my $orig_key;
+  if ($original_name =~ /$prefix\.(\w+)\.$extension/) {
+    $orig_key = $1;
+  }
+  else {
+    $orig_key = $original_name;
+  }
+  #print " [$new_key], [$orig_key]\n";
+  print $DBH_HIST "$new_key\t$orig_key\n";
+}
+__END__
+
+
+VERSIONS
+
+v01 May 8'16 S. Cannon. Exploratory, incomplete
+v02 May 19'16 SC Add BerkeleyDB
+v03 May 26'16 SC Minor documentation changes and bug fixes.
+v04 May 30'16 SC Remove namespace handling.
+              Add option -bare to just generate a new short name.
+v05 Jun 4'16 SC Replace BerkeleyDB with plain tab-del text output 
+              (for ease of inspection & editing).
+v06 Jun 9'16 SC Change "-bare" to -simple, and let -simple take an integer value, to make a block of keys.
+              Remove -fileout (which printed a new empty file by the new keyed name)
+              Change testing for key existence, and add $MAX_KEYS_TO_TRY
+v07 Jun 13'16 SC Set default output directory to glob("~/metadata/). The idea is to write keys 
+              and log locally and then merge in a git repository.
+v08 Jun 15'16 SC Remove vowels from key string. Change default len_of_id to 4.
