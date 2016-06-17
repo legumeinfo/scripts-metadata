@@ -1,0 +1,22 @@
+# attribute list: genome assembly
+# attribute modification date: 2016-06-15
+genus_species
+gensp_abbreviation
+genotype
+data_type
+assembly_method
+assembly_version
+database_name
+bioproject_id
+biosample_id
+repository_url
+md5_original
+previous_filename
+new_filename
+local_file_creation_date
+transformations_from_prev
+md5_new
+pmid
+doi
+ark
+comment

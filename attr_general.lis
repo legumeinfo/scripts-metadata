@@ -1,0 +1,12 @@
+# attribute list: general
+# attribute modification date: 2016-06-15
+data_source
+path_to_original_local_dir
+md5_original
+previous_filename
+new_filename
+local_file_creation_date
+md5_new
+transformation_from_prev
+ark
+comment
