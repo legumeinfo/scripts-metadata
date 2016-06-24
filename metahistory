@@ -76,4 +76,3 @@ v04 06-13-16 SC Set default output directory to glob("~/metadata/). The idea is 
              and log locally and then merge in a git repository.
 v05 06-23-16 SC Clean up filename creation.
 
-TO DO - take registry path as a parameter

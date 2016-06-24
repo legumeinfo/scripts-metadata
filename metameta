@@ -240,5 +240,4 @@ v06 06-22-16 SC Change default file extension to .txt
 TO DO:
  - If a key is entered that exists in the metadata registry, EDIT rather than re-enter the data for that session.
  - Add a function to simply report data for a given key.
- - Take registry path as a parameter
  - Modify the attribute templates to provide example data and constraints or enumerated options
