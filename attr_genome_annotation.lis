@@ -1,1 +1,20 @@
-/Users/sc/metadata/attr_genome_annotation.lis
+# attribute list: genome annotation
+# attribute modification date: 2016-06-23
+key_name
+parent_assembly_key
+data_type
+annotation_version
+annotation_method
+database_name
+repository_url
+md5_original
+previous_filename
+local_file_creation_date
+new_filename
+original_file_date
+transformations_from_prev
+md5_new
+pmid
+doi
+ark
+comment
