@@ -13,13 +13,13 @@ my $usage = <<EOS;
   Examples: 
     metakey -com "Key and rename initial file" -pre gensp.pre -ext fa -orig initial_file.fa
       returns:
-        # MsI Key and rename initial file
-        initial_file.fa  gensp.pre.MsI.fa
+        # zR56 Key and rename initial file
+        initial_file.fa  gensp.pre.zR56.fa
 
-    metakey -com "Rekey a file" -pre gensp.pre -ext .fa -orig gensp.pre.MsI.fa
+    metakey -com "Rekey a file" -pre gensp.pre -ext fa -orig gensp.pre.MsZ5.fa
       returns:
-        # t2h Rekey a file #1
-          gensp.pre.MsI.fa  gensp.pre.t2h.fa
+        # MsZ5 Rekey a file
+          gensp.pre.MsZ5.fa  gensp.pre.MsZ5.fa
 
     metakey -simple [INTEGER]
       returns just a set of unique, simple key (INTEGER many; or a single key if no integer is given):
@@ -28,31 +28,26 @@ my $usage = <<EOS;
   Required unless "-simple" is set:
     -original_name  Original filename
     -prefix     Human-readable filename prefix
-    -extension  A file extension, e.g. fa, gff, txt
+    -extension  A file extension, e.g. fa, gff, txt (optional)
   
   Options:
     -simple     Return just a unique key string and end
     -key        Short unique name (provide if you want to use an existing key in the new extension)
-    -registry   Base filename for "registries" of metadata keys. If the base filename 
-                is "~/metadata/registry" (default), then these files will be generated:
-                   registry_main.txt      Hash of keys and filenames
-                   registry_rev_hist.txt  Hash of new keys and preceding keys or initial filename
     -log        Log file to write a record of this file's operations, 
                 written to "~/metadata/" by default
     -comment:s  Brief comments about the this file naming operation
-  
+    -registry   Base filename for "registries" of metadata keys. Default "registry"
+    -base_dir   Full/absolute directory path to registry files, e.g. "/home/ME/metadata" 
     -len_of_id  Length of generated random string used in the new IDs (>=2)
-  
     -help       This message. 
   
 EOS
 
 my ($extension, $help, $prefix, $key, $comment, $simple);
 
-my $home_dir = glob("~");
-my $metadata_dir = "metadata"; # You may want to change this
-my $logfile="$home_dir/$metadata_dir/LOG.txt";
-my $registry = "$home_dir/$metadata_dir/registry";
+my $base_dir = glob("~/metadata"); 
+#my $base_dir = "/usr/local/www/data/metadata"; 
+my $registry = "registry"; 
 
 my $original_name="NONE";
 my $len_of_id = 4;
@@ -60,10 +55,10 @@ my $len_of_id = 4;
 GetOptions (
   "simple:i" =>        \$simple,  
   "original_name:s" => \$original_name,  # required unless -simple
-  "logfile:s" =>       \$logfile,
   "prefix:s" =>        \$prefix,  # required unless -simple
   "key:s" =>           \$key,
-  "extension:s" =>     \$extension,   # required unless -simple
+  "extension:s" =>     \$extension, 
+  "registry:s" =>      \$registry,
   "comment:s" =>       \$comment,
   "len_of_id:i" =>     \$len_of_id,
   "help" =>            \$help,
@@ -71,7 +66,7 @@ GetOptions (
 
 die "\n$usage\n" if ( $help 
                       or !defined($simple) 
-                      and not (defined($original_name) and defined($prefix) and defined($extension) ) );
+                      and not (defined($original_name) and defined($prefix) ) );
 
 if (defined($simple)) {
   if ($simple == 0) {
@@ -82,15 +77,16 @@ if (defined($simple)) {
 }
 
 die "\n-len_of_id must be >= 2\n" if ( $len_of_id < 2 );
+
+my $registry_main =     "$base_dir/$registry" . "_main.txt";
+my $registry_rev_hist = "$base_dir/$registry" . "_rev_hist.txt";
+my $path_to_logfile =   "$base_dir/$registry" . "_log.txt";
+
 my $LOG;
-if ($logfile) {
-  open ($LOG, ">>", $logfile) or die 
-    "Can't open $logfile for writing. Check whether $home_dir/$metadata_dir exists. $!\n";
+if ($path_to_logfile) {
+  open ($LOG, ">>", $path_to_logfile) or die 
+    "Can't open $path_to_logfile for writing. $!\n";
 }
-
-my $registry_main = $registry . "_main.txt";
-my $registry_rev_hist = $registry . "_rev_hist.txt";
-
 
 # 62 characters (excluding vowels AEIOU, to avoid words)
 my @s=qw(B C D F G H J K L M N P Q R S T V W X Y Z 
@@ -107,7 +103,10 @@ my $MAX_KEYS_TO_TRY=10;
 if (defined($key) and not defined($simple)) { # If $key was supplied by user, use it; otherwise ...
   $orig_key = $key;
   $new_key = $key;
-  $new_filename = "$prefix.$orig_key.$extension";  
+  if (defined($extension)) {
+    $new_filename = "$prefix.$orig_key.$extension"
+  }
+  else {$new_filename = "$prefix.$orig_key"}
 }
 else { # ... otherwise, generate a new key
   
@@ -119,7 +118,7 @@ else { # ... otherwise, generate a new key
 
     # Read stored hash into memory, from main registry
     if (-e $registry_main) { # Read key hash in, if it exists
-      open(my $DBH_MAIN, "<", $registry_main) or die "Can't open $registry_main. Check whether $home_dir/$metadata_dir exists.:$!\n";
+      open(my $DBH_MAIN, "<", $registry_main) or die "Can't open $registry_main. Check whether $base_dir exists. $!\n";
       while (<$DBH_MAIN>) {
         chomp;
         my ($key, $val) = split /\s/;
@@ -132,7 +131,7 @@ else { # ... otherwise, generate a new key
     }
     
     # Open registry for writing
-    open($DBH_MAIN, ">>", $registry_main) or die "Can't open out $registry_main. Check whether $home_dir/$metadata_dir exists.$!\n";
+    open($DBH_MAIN, ">>", $registry_main) or die "Can't open out $registry_main. Check whether $base_dir exists. $!\n";
 
     if ($id_hsh{$new_key}) {
       $keys_tried++;
@@ -160,7 +159,12 @@ else { # ... otherwise, generate a new key
         }
       }
       else { # not "simple", so generate key and filename
-        $new_filename = "$prefix.$new_key.$extension";
+        if (defined($extension)) {
+          $new_filename = "$prefix.$new_key.$extension";
+        }
+        else {
+          $new_filename = "$prefix.$new_key";
+        }
         # print "new_key: $new_key\n";
         $id_hsh{$new_key} = $new_filename;
         print "$new_key\t$new_filename\n";
@@ -174,15 +178,13 @@ else { # ... otherwise, generate a new key
 ########## Print to LOG ##########
 my $logstring;
 if (defined $comment) {
-  $logstring = "\n# $new_key $comment\n  $original_name\t$new_filename\n";
+  $logstring = "\n# $new_key $comment\n  $original_name  $new_filename\n";
 }
 else {
   $logstring = "# \n  $original_name\t$new_filename\n";
 }
 print $logstring;
-if (defined($logfile)) {
-  print $LOG $logstring;
-}
+print $LOG $logstring;
 
 ########## Store the previous key & new key ##########
 # A==>B   B==>C   C==>D   is stored as
@@ -198,6 +200,7 @@ if (defined($key)) { # enter in order VALUE, KEY
 }
 else { # enter in order VALUE, KEY
   my $orig_key;
+  if (not defined ($extension)) {$extension = ""}
   if ($original_name =~ /$prefix\.(\w+)\.$extension/) {
     $orig_key = $1;
   }
@@ -225,3 +228,6 @@ v06 Jun 9'16 SC Change "-bare" to -simple, and let -simple take an integer value
 v07 Jun 13'16 SC Set default output directory to glob("~/metadata/). The idea is to write keys 
               and log locally and then merge in a git repository.
 v08 Jun 15'16 SC Remove vowels from key string. Change default len_of_id to 4.
+v09 Jun 22'16 SC Change default log filename to registry_LOG.txt
+              Make extension optional. Clean up filename creation.
+

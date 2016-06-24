@@ -1,18 +1,1 @@
-# attribute list: genome annotation
-# attribute modification date: 2016-06-16
-parent_assembly_key
-data_type
-annotation_version
-annotation_method
-database_name
-repository_url
-md5_original
-previous_filename
-new_filename
-local_file_creation_date
-transformations_from_prev
-md5_new
-pmid
-doi
-ark
-comment
+/Users/sc/metadata/attr_genome_annotation.lis

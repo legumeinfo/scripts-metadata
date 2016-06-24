@@ -14,39 +14,35 @@ my $usage = <<EOS;
     generates (depending on key history):  LF-t2h <== LF-MsI <== initial_file.fa
 
   Required:
-    -key    name of key; history of this key will be returned
-        The reserved eerm 'ALL' will return the list of all keys and values,
-        though in no particular order:
-        -key ALL
+    -key    name of key; history of this key will be returned.
+            The reserved terms 'ALL' or 'all' will return the list of all 
+            keys and values (though in no particular order)
   
   Options:
-    -registry   Base filename for "registries" of metadata keys. If the base filename 
-                is "~/metadata/registry" (default), then these files holds the history:
-                   "~/metadata/registry/registry_rev_hist.txt"
-    -namespace  Brief namespace, used to prefix the key. Default may be set in the code
+    -registry   Base filename for "registries" of metadata keys. Default "registry"
+    -base_dir   Full/absolute directory path to registry files, e.g. "/home/ME/metadata" 
   
     -help       This message. 
   
 EOS
 
-my $namespace="LF";
 my $key;
 my $help;
 
-my $home_dir = glob("~");
-my $metadata_dir = "metadata"; # You may want to change this
-my $registry = "$home_dir/$metadata_dir/registry";
+my $base_dir = glob("~/metadata"); 
+#my $base_dir = "/usr/local/www/data/metadata"; 
+my $registry = "registry"; 
 
 GetOptions (
   "key=s" =>           \$key,   # required
   "registry:s" =>      \$registry,
-  "namespace:s" =>     \$namespace,
+  "base_dir:s" =>      \$registry,
   "help" =>            \$help,
 );
 
 die "\n$usage\n" if ( $help or !defined($key) );
 
-my $registry_rev_hist = $registry . "_rev_hist.txt";
+my $registry_rev_hist = "$base_dir/$registry" . "_rev_hist.txt";
 
 #my $dbh_hist = new BerkeleyDB::Hash(
 #        -Filename => $registry_rev_hist,
@@ -59,7 +55,7 @@ while (<$DBH_HIST>) {
   chomp;
   my ($k, $v) = split /\s/, $_;
   $hash{$k} = $v;
-  if ( $key =~ /^ALL/i ) {
+  if ( $key eq "ALL" or $key eq "all"  ) {
     print "$k\t$v\n";
   }
   else {
@@ -78,4 +74,6 @@ v03 Jun 4'16 SC Replace BerkeleyDB with plain tab-del text output
                  (for ease of inspection & editing).
 v04 06-13-16 SC Set default output directory to glob("~/metadata/). The idea is to write keys 
              and log locally and then merge in a git repository.
+v05 06-23-16 SC Clean up filename creation.
 
+TO DO - take registry path as a parameter

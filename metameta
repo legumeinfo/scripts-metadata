@@ -18,10 +18,6 @@ my $usage = <<EOS;
     metameta -key XYZ 
         This allows interactive entry of attribute-value pairs, and stores the results
         in a database, with the A-V pairs referenced by the given key.
-        In the example key "NS-XYZ", "NS-" is the selected namespace string.
-        If the provided key doesn't have a namespace (with form "XY-"), the default
-        namespace in the program will be used, unless it ie explicitly provided
-        as a parameter using the -namespace option.
   
   Example 2:
     metameta -key XYZ -file  NEW_META.tsv
@@ -32,45 +28,35 @@ my $usage = <<EOS;
         In this usage, the comment field for the specified key can be entered interactively.
 
   Required:
-    -key           
+    -key        Name of a key for which to add metadata.
   
   Options:
-    -comment       Only add comments for one or more keys, then exit. 
-                   Used only in interactive mode (default if not -file)
-    -file          To specify a file with metadata, to be added to the registry.
-                   
-                   If -file is not set, then the program will be run interactively.
-                   In interactive mode, all available attributes will be presented, 
-                   for interactive entry of values. If not value is entered for an attribute, 
-                   that attribute-value pair won't be stored.
-    -registry      Base filename for "registries" of metadata keys. If the base registry 
-                   filename is "./registry" (default), then this metadata file will be 
-                   accessed (or created if it doesn't exist):
-                      registry_meta.json      Hash of keys and {attributes -> values}
-  
-    -namespace     Brief namespace, used to prefix the key. Default may be set in the code.
-                   In the example key "NS-XYZ", "NS-" is the selected namespace string.
-                   If the provided key doesn't have a namespace (with form "XY-"), the default
-                   namespace in the program will be used, unless it ie explicitly provided
-                   as a parameter using the -namespace option.
+    -comment    Only add comments for one or more keys, then exit. 
+                Used only in interactive mode (default if not -file)
+    -file       To specify a file with metadata, to be added to the registry.
+                If -file is not set, then the program will be run interactively.
+                In interactive mode, all available attributes will be presented, 
+                for interactive entry of values. If not value is entered for an attribute, 
+                that attribute-value pair won't be stored.
+    -registry   Base filename for "registries" of metadata keys. Default "registry"
+    -base_dir   Full/absolute directory path to registry files, e.g. "/home/ME/metadata" 
     -attribute_list  Filename with list of attributes (field names) that may be used in creating 
                       the attribute-value metadata listing. Useful in interactive mode.
                       Default name can be set in the code.
-    -format        "table" or "json" (default "table").
+    -format     "table" or "json" (default "table").
      
-    -help          This message. 
+    -help       This message. 
   
 EOS
 
 my ($help, $key, $file, $comment);
 my $format = "table";
 
-my $home_dir = glob("~");
-my $metadata_dir = "metadata"; # You may want to change this
-my $registry = "registry";
-my $attribute_list = "attr_general.lis";
+my $base_dir = glob("~/metadata"); 
+#my $base_dir = "/usr/local/www/data/metadata"; 
+my $registry = "registry"; 
 
-my $namespace="LF";
+my $attribute_list = "attr_general.lis";
 
 GetOptions (
   "key=s" =>            \$key,  # required
@@ -78,7 +64,6 @@ GetOptions (
   "file:s" =>           \$file,
   "registry:s" =>       \$registry,
   "comment" =>          \$comment,
-  "namespace:s" =>      \$namespace,
   "format:s" =>         \$format,
   "help" =>             \$help,
 );
@@ -92,15 +77,15 @@ die "\n$usage\n" if ( $help or !defined($key) and !defined($file) );
 # Allow the user to enter data for other keys if they wish
 # Write data to file and close
 
-my $attribute_list_path = "$home_dir/$metadata_dir/$attribute_list";
+my $attribute_list_path = "$base_dir/$attribute_list";
 
 
 my $ext;
-if ( $format =~ /^t/i ) { $ext = "tab" }
+if ( $format =~ /^t/i ) { $ext = "txt" }
 elsif ( $format =~ /^j/i ) { $ext = "json" }
 else { die "\n$format must be 'table' or 'json'\n" }
 
-my $registry_meta_path = "$home_dir/$metadata_dir/$registry" . "_meta.$ext";
+my $registry_meta_path = "$base_dir/$registry" . "_meta.$ext";
 my (%HoH, $href, @attr);
 
 my $REGISTRY_FH;
@@ -249,9 +234,11 @@ v03 05-29-16 SC Retain order of attribute_list in text output.
 v04 06-13-16 SC Set default output directory to glob("~/metadata/). The idea is to write keys 
              and log locally and then merge in a git repository.
 v05 06-15-16 SC Change construction of registry name and path
+v06 06-22-16 SC Change default file extension to .txt
+             Clean up filename creation.
 
-TO DO: if a key is entered that exists in the metadata registry, EDIT rather than re-enter the data for that session.
-
-TO DO: add a function to simply report data for a given key.
-
-
+TO DO:
+ - If a key is entered that exists in the metadata registry, EDIT rather than re-enter the data for that session.
+ - Add a function to simply report data for a given key.
+ - Take registry path as a parameter
+ - Modify the attribute templates to provide example data and constraints or enumerated options
